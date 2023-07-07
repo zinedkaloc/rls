@@ -1,4 +1,4 @@
-name: Create Release and Update Changelog
+name: Monorepo Release and Update Changelog
 on:
   push:
     branches:
@@ -19,39 +19,53 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Check if there is a change
-        run: |
-          result=$(git diff --name-only origin/release..HEAD | wc -l)
-          if [ "$result" -eq "0" ]; then
-            echo "No changes to process."
-            exit 0
-          fi
+      - name: Bootstrap Lerna
+        run: npx lerna bootstrap
 
-      - name: Generate changelog
-        id: changelog
-        uses: TriPSs/conventional-changelog-action@v3
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update changelog
+      - name: Check for changes and update versions
         run: |
-          echo "CHANGELOG:\n${{ steps.changelog.outputs.changelog }}" >> CHANGELOG.md
+          packages=("agnost/engine/core" "agnost/engine/monitor" "agnost/engine/realtime" "agnost/engine/scheduler" "agnost/engine/worker" "agnost/platform/core" "agnost/platform/sync" "agnost/platform/worker" "agnost/studio")
+          all_changes=""
+          overall_version=""
+          for package in ${packages[@]}; do
+            cd $package
+            echo "Checking changes for $package..."
+            result=$(git diff --name-only origin/master..HEAD . | wc -l)
+            if [ "$result" -gt "0" ]; then
+              echo "$package has changes. Updating version..."
+              npm ci
+              npm version patch --no-git-tag-version
+              version=$(cat package.json | jq -r '.version')
+              git add package.json
+              git config --local user.email "action@github.com"
+              git config --local user.name "GitHub Action"
+              git commit -m "chore(release): $version [skip ci]"
+
+              echo "Generating changelog for $package"
+              changelog=$(npx conventional-changelog -p angular -i CHANGELOG.md -s)
+              all_changes+="# $package $version\n"
+              all_changes+="$changelog\n\n"
+              overall_version="$version"
+            fi
+            cd -
+          done
+          echo "::set-output name=all_changes::$all_changes"
+          echo "::set-output name=overall_version::$overall_version"
+        id: version_changelog
+
+      - name: Update overall version
+        run: |
+          echo "Updating overall version..."
+          echo "::set-output name=overall_version::$(npm version patch --no-git-tag-version)"
+        id: overall_version
+
+      - name: Update overall changelog
+        run: |
+          echo "${{ steps.version_changelog.outputs.all_changes }}" >> CHANGELOG.md
+          git add CHANGELOG.md
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git commit -am "Update CHANGELOG.md [skip ci]"
-
-      - name: Debug changelog output
-        run: echo "${{ steps.changelog.outputs.changelog }}"
-
-      - name: Update version
-        id: version
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          npm version patch --no-git-tag-version
-          git add package.json
-          echo "::set-output name=version::$(cat package.json | jq -r '.version')"
-          git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
         uses: ad-m/github-push-action@master
@@ -60,7 +74,7 @@ jobs:
           branch: ${{ github.ref }}
 
       - name: Create tag
-        run: git tag v${{ steps.version.outputs.version }}
+        run: git tag v${{ steps.overall_version.outputs.overall_version }}
 
       - name: Push tag
         uses: ad-m/github-push-action@master
@@ -74,9 +88,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Release v${{ steps.version.outputs.version }}
-          body: |
-            ${{ steps.changelog.outputs.changelog }}
+          tag_name: v${{ steps.overall_version.outputs.overall_version }}
+          release_name: Release v${{ steps.overall_version.outputs.overall_version }}
+          body: ${{ steps.version_changelog.outputs.all_changes }}
           draft: false
           prerelease: false
