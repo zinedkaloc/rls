@@ -82,7 +82,44 @@ jobs:
           tags: true
 
       - name: Create Release
-        id: create_release
+        id: x
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Release v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.data }}
+          draft: false
+          prerelease: false
+
+      - name: Update version
+        id: versionx
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          npm version patch --no-git-tag-version --prefix ${{ matrix.directory }}
+          git add ${{ matrix.directory }}/package.json
+          echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
+          git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+      - name: Create tag
+        run: git tag v${{ steps.version.outputs.version }}
+
+      - name: Push tag
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tags: true
+
+      - name: Create Release
+        id: create_releasex
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -136,7 +173,7 @@ jobs:
           echo "::set-output name=aggregated_changelog::$(cat aggregated-changelog.md)"
 
       - name: Create Release
-        id: create_release
+        id: x
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
