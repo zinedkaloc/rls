@@ -1,4 +1,4 @@
-name: Monorepo Release and Update Changelog
+name: Create Release and Update Changelog
 on:
   push:
     branches:
@@ -7,6 +7,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        directory:
+          [
+            "agnost/engine/core",
+            "agnost/engine/monitor",
+            "agnost/engine/realtime",
+            "agnost/engine/scheduler",
+            "agnost/engine/worker",
+            "agnost/platform/core",
+            "agnost/platform/sync",
+            "agnost/platform/worker",
+            "agnost/studio",
+          ]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -17,55 +32,37 @@ jobs:
           node-version: 14
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --prefix ${{ matrix.directory }}
 
-      - name: Bootstrap Lerna
-        run: npx lerna bootstrap
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.x"
 
-      - name: Check for changes and update versions
+      - name: Install Python Dependencies
+        run: pip install PyGithub
+
+      - name: Generate changelogs and update versions
+        run: python3 main.py
+
+      - name: Read Changelog Data
+        id: changelog
         run: |
-          packages=("agnost/engine/core" "agnost/engine/monitor" "agnost/engine/realtime" "agnost/engine/scheduler" "agnost/engine/worker" "agnost/platform/core" "agnost/platform/sync" "agnost/platform/worker" "agnost/studio")
-          all_changes=""
-          overall_version=""
-          for package in ${packages[@]}; do
-            cd $package
-            echo "Checking changes for $package..."
-            result=$(git diff --name-only origin/master..HEAD . | wc -l)
-            if [ "$result" -gt "0" ]; then
-              echo "$package has changes. Updating version..."
-              npm ci
-              npm version patch --no-git-tag-version
-              version=$(cat package.json | jq -r '.version')
-              git add package.json
-              git config --local user.email "action@github.com"
-              git config --local user.name "GitHub Action"
-              git commit -m "chore(release): $version [skip ci]"
+          content=`cat changelog_data.json`
+          content="${content//'%'/'%25'}"
+          content="${content//$'\n'/'%0A'}"
+          content="${content//$'\r'/'%0D'}"
+          echo "::set-output name=data::$content"
 
-              echo "Generating changelog for $package"
-              changelog=$(npx conventional-changelog -p angular -i CHANGELOG.md -s)
-              all_changes+="# $package $version\n"
-              all_changes+="$changelog\n\n"
-              overall_version="$version"
-            fi
-            cd -
-          done
-          echo "::set-output name=all_changes::$all_changes"
-          echo "::set-output name=overall_version::$overall_version"
-        id: version_changelog
-
-      - name: Update overall version
+      - name: Update version
+        id: version
         run: |
-          echo "Updating overall version..."
-          echo "::set-output name=overall_version::$(npm version patch --no-git-tag-version)"
-        id: overall_version
-
-      - name: Update overall changelog
-        run: |
-          echo "${{ steps.version_changelog.outputs.all_changes }}" >> CHANGELOG.md
-          git add CHANGELOG.md
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git commit -am "Update CHANGELOG.md [skip ci]"
+          npm version patch --no-git-tag-version --prefix ${{ matrix.directory }}
+          git add ${{ matrix.directory }}/package.json
+          echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
+          git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
         uses: ad-m/github-push-action@master
@@ -74,7 +71,7 @@ jobs:
           branch: ${{ github.ref }}
 
       - name: Create tag
-        run: git tag v${{ steps.overall_version.outputs.overall_version }}
+        run: git tag v${{ steps.version.outputs.version }}
 
       - name: Push tag
         uses: ad-m/github-push-action@master
@@ -88,8 +85,62 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.overall_version.outputs.overall_version }}
-          release_name: Release v${{ steps.overall_version.outputs.overall_version }}
-          body: ${{ steps.version_changelog.outputs.all_changes }}
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Release v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.data }}
+          draft: false
+          prerelease: false
+
+  top_level:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 14
+
+      - name: Update top level version
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          npm version patch --no-git-tag-version
+          git add package.json
+          git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+      - name: Create tag
+        run: git tag v$(cat package.json | jq -r '.version')
+
+      - name: Push tag
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tags: true
+
+      - name: Generate aggregated changelog
+        id: agg_changelog
+        run: |
+          chmod +x ./generate-aggregated-changelog.sh
+          ./generate-aggregated-changelog.sh > aggregated-changelog.md
+          echo "::set-output name=aggregated_changelog::$(cat aggregated-changelog.md)"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v$(cat package.json | jq -r '.version')
+          release_name: Release v$(cat package.json | jq -r '.version')
+          body: ${{ steps.agg_changelog.outputs.changelog }}
           draft: false
           prerelease: false

@@ -1,0 +1,13 @@
+# Configuration for issue templates
+
+# Define the default issue template
+issue_template: bug_report.md
+
+# Define the templates available for selection
+templates:
+  - name: Bug Report
+    about: Report a bug in the project
+    filename: bug_report.md
+  - name: Feature Request
+    about: Suggest a new feature or enhancement
+    filename: feature_request.md
