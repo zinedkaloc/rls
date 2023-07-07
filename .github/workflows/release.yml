@@ -61,21 +61,27 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git checkout -b temporary-${{ matrix.directory }}-${{ github.run_id }}
           npm version patch --no-git-tag-version --prefix ${{ matrix.directory }}
           git add ${{ matrix.directory }}/package.json ${{ matrix.directory }}/package-lock.json
           echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
-          git checkout -b release-${{ matrix.directory }}-${{ steps.version.outputs.version }}
-          git stash
-          git pull origin master --rebase
-          git stash pop
-          git add ${{ matrix.directory }}/package.json ${{ matrix.directory }}/package-lock.json
           git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
         run: |
-          git push origin HEAD:release-${{ matrix.directory }}-${{ steps.version.outputs.version }}
+          git push origin HEAD:temporary-${{ matrix.directory }}-${{ github.run_id }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create pull request
+        uses: repo-sync/pull-request@v2
+        with:
+          source_branch: "temporary-${{ matrix.directory }}-${{ github.run_id }}"
+          destination_branch: "master"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          pr_title: "Update version for ${{ matrix.directory }}"
+          pr_body: "Automated version update"
+          pr_label: "automerge"
 
       - name: Create tag
         run: |
@@ -114,24 +120,28 @@ jobs:
 
       - name: Update top level version and create new branch
         run: |
-
-
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git checkout -b temporary-top-level-${{ github.run_id }}
           npm version patch --no-git-tag-version
-          git add package.json package-lock.json
-          git checkout -b release-top-level-$(cat package.json | jq -r '.version')
-          git stash
-          git pull origin master --rebase
-          git stash pop
           git add package.json package-lock.json
           git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
         run: |
-          git push origin HEAD:release-top-level-$(cat package.json | jq -r '.version')
+          git push origin HEAD:temporary-top-level-${{ github.run_id }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create pull request
+        uses: repo-sync/pull-request@v2
+        with:
+          source_branch: "temporary-top-level-${{ github.run_id }}"
+          destination_branch: "master"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          pr_title: "Update top level version"
+          pr_body: "Automated version update"
+          pr_label: "automerge"
 
       - name: Create tag
         run: |
