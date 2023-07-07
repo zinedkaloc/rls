@@ -74,7 +74,9 @@ jobs:
           branch: release-${{ matrix.directory }}-${{ steps.version.outputs.version }}
 
       - name: Create tag
-        run: git tag v${{ steps.version.outputs.version }}
+        run: |
+          git tag -d v$(cat package.json | jq -r '.version') || true
+          git tag v$(cat package.json | jq -r '.version')
 
       - name: Push tag
         uses: ad-m/github-push-action@master
