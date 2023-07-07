@@ -11,20 +11,22 @@ jobs:
       matrix:
         directory:
           [
-            "agnost/engine/core",
-            "agnost/engine/monitor",
-            "agnost/engine/realtime",
-            "agnost/engine/scheduler",
-            "agnost/engine/worker",
-            "agnost/platform/core",
-            "agnost/platform/sync",
-            "agnost/platform/worker",
-            "agnost/studio",
+            "engine/core",
+            "engine/monitor",
+            "engine/realtime",
+            "engine/scheduler",
+            "engine/worker",
+            "platform/core",
+            "platform/sync",
+            "platform/worker",
+            "studio",
           ]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v2
