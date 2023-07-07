@@ -65,7 +65,9 @@ jobs:
           git add ${{ matrix.directory }}/package.json
           echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
           git checkout -b release-${{ matrix.directory }}-${{ steps.version.outputs.version }}
+          git stash
           git pull origin master --rebase
+          git stash pop
           git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
@@ -116,9 +118,10 @@ jobs:
           npm version patch --no-git-tag-version
           git add package.json
           git checkout -b release-top-level-$(cat package.json | jq -r '.version')
+          git stash
           git pull origin master --rebase
+          git stash pop
           git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
-
       - name: Push changes
         run: |
           git push origin HEAD:release-top-level-$(cat package.json | jq -r '.version')
