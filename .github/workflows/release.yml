@@ -62,12 +62,13 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           npm version patch --no-git-tag-version --prefix ${{ matrix.directory }}
-          git add ${{ matrix.directory }}/package.json
+          git add ${{ matrix.directory }}/package.json ${{ matrix.directory }}/package-lock.json
           echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
           git checkout -b release-${{ matrix.directory }}-${{ steps.version.outputs.version }}
           git stash
           git pull origin master --rebase
           git stash pop
+          git add ${{ matrix.directory }}/package.json ${{ matrix.directory }}/package-lock.json
           git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
 
       - name: Push changes
@@ -113,15 +114,19 @@ jobs:
 
       - name: Update top level version and create new branch
         run: |
+
+
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           npm version patch --no-git-tag-version
-          git add package.json
+          git add package.json package-lock.json
           git checkout -b release-top-level-$(cat package.json | jq -r '.version')
           git stash
           git pull origin master --rebase
           git stash pop
+          git add package.json package-lock.json
           git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
+
       - name: Push changes
         run: |
           git push origin HEAD:release-top-level-$(cat package.json | jq -r '.version')
