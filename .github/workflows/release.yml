@@ -5,6 +5,7 @@ on:
       - feature/*
       - release/*
       - hotfix/*
+      - dev
 
 jobs:
   build:
@@ -32,7 +33,7 @@ jobs:
           for package in ${packages[@]}; do
             cd $package
             echo "Checking changes for $package..."
-            result=$(git diff --name-only | wc -l)
+            result=$(git diff --name-only origin/master..HEAD . | wc -l)
             echo "Changes found: $result"
             if [ "$result" -gt "0" ]; then
               echo "$package has changes. Updating version..."
