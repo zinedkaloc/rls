@@ -50,11 +50,11 @@ jobs:
 
       - name: Check for changes and update versions
         run: |
-          packages=$(echo "${{ needs.get_apps.outputs.applications }}" | tr -d '[]' | tr -d '"')
+          packages=${{ needs.get_apps.outputs.applications }}" | tr -d '[]' | tr -d '"' | tr ',' ' ')
           echo "Found changes in packages: $packages"
           all_changes=""
           overall_version=""
-          for package in ${packages[@]}; do
+          for package in ${packages}; do
             cd $package
             echo "Checking changes for $package..."
             result=$(git diff --name-only origin/master..HEAD . | wc -l)
