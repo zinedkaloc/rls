@@ -50,7 +50,7 @@ jobs:
 
       - name: Check for changes and update versions
         run: |
-          packages=${{ needs.get_apps.outputs.applications }}" | tr -d '[]' | tr -d '"' | tr ',' ' ')
+          packages=$(echo "${{ needs.get_apps.outputs.applications }}" | tr -d '[]' | tr -d '"' | tr ',' ' ')
           echo "Found changes in packages: $packages"
           all_changes=""
           overall_version=""
