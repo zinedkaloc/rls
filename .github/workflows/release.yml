@@ -48,6 +48,9 @@ jobs:
       - name: Install lerna
         run: npm i -g lerna
 
+      - name: Install conventional-changelog
+        run: npm i -g conventional-changelog-cli
+
       - name: Check for changes and update versions
         run: |
           packages=$(echo "${{ needs.get_apps.outputs.applications }}" | tr -d '[]' | tr -d '"' | tr ',' ' ')
