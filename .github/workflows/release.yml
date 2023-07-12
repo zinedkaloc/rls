@@ -30,7 +30,7 @@ jobs:
           for package in ${packages[@]}; do
             cd $package
             echo "Checking changes for $package..."
-            result=$(git diff --name-only origin/master..HEAD . | wc -l)
+            result=$(git diff --name-only | wc -l)
             if [ "$result" -gt "0" ]; then
               echo "$package has changes. Updating version..."
               npm ci

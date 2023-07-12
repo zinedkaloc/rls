@@ -9,3 +9,5 @@ console.log("monitor/monitor.js");
 
 // Update the files
 console.log("monitor/monitor2.js");
+
+console.count(first);
