@@ -31,6 +31,7 @@ jobs:
             cd $package
             echo "Checking changes for $package..."
             result=$(git diff --name-only | wc -l)
+            echo "Changes found: $result"
             if [ "$result" -gt "0" ]; then
               echo "$package has changes. Updating version..."
               npm ci
