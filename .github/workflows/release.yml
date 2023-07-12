@@ -1,8 +1,10 @@
 name: Monorepo Release and Update Changelog
 on:
-  push:
+  pull_request:
     branches:
-      - master
+      - feature/*
+      - release/*
+      - hotfix/*
 
 jobs:
   build:
