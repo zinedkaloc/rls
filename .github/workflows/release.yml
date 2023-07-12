@@ -1,4 +1,4 @@
-name: Create Release and Update Changelog
+name: Monorepo Release and Update Changelog
 on:
   push:
     branches:
@@ -7,26 +7,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        directory:
-          [
-            "engine/core",
-            "engine/monitor",
-            "engine/realtime",
-            "engine/scheduler",
-            "engine/worker",
-            "platform/core",
-            "platform/sync",
-            "platform/worker",
-            "studio",
-          ]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v2
@@ -34,65 +17,65 @@ jobs:
           node-version: 14
 
       - name: Install Dependencies
-        run: npm ci --prefix ${{ matrix.directory }}
+        run: npm ci
 
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: "3.x"
-
-      - name: Install Python Dependencies
-        run: pip install PyGithub
-
-      - name: Generate changelogs and update versions
-        run: python3 main.py
-
-      - name: Read Changelog Data
-        id: changelog
+      - name: Check for changes and update versions
         run: |
-          content=`cat changelog_data.json`
-          content="${content//'%'/'%25'}"
-          content="${content//$'\n'/'%0A'}"
-          content="${content//$'\r'/'%0D'}"
-          echo "::set-output name=data::$content"
-
-      - name: Update version and create new branch
-        id: version
-        run: |
+          packages=("engine/core" "engine/monitor" "engine/realtime" "engine/scheduler" "engine/worker" "platform/core" "platform/sync" "platform/worker" "studio")
+          all_changes=""
+          overall_version=""
+          for package in ${packages[@]}; do
+            cd $package
+            echo "Checking changes for $package..."
+            result=$(git diff --name-only origin/master..HEAD . | wc -l)
+            if [ "$result" -gt "0" ]; then
+              echo "$package has changes. Updating version..."
+              npm ci
+              npm version patch --no-git-tag-version
+              version=$(cat package.json | jq -r '.version')
+              git add package.json
+              changelog=$(npx conventional-changelog -p angular -i CHANGELOG.md -s)
+              all_changes+="# $package $version\n"
+              all_changes+="$changelog\n\n"
+              overall_version="$version"
+            fi
+            cd -
+          done
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git checkout -b temporary-${{ matrix.directory }}-${{ github.run_id }}
-          npm version patch --no-git-tag-version --prefix ${{ matrix.directory }}
-          git add ${{ matrix.directory }}/package.json ${{ matrix.directory }}/package-lock.json
-          echo "::set-output name=version::$(cat ${{ matrix.directory }}/package.json | jq -r '.version')"
-          git commit -m "chore(release): $(cat ${{ matrix.directory }}/package.json | jq -r '.version') [skip ci]"
+          git commit -m "chore(release): $version [skip ci]"
+          echo "Generating changelog for $package"
+          echo "::set-output name=all_changes::$all_changes"
+          echo "::set-output name=overall_version::$overall_version"
+        id: version_changelog
 
-      - name: Push changes
+      - name: Update overall version
         run: |
-          git push origin HEAD:temporary-${{ matrix.directory }}-${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "Updating overall version..."
+          echo "::set-output name=overall_version::$(npm version patch --no-git-tag-version)"
+        id: overall_version
 
-      - name: Create pull request
-        uses: repo-sync/pull-request@v2
+      - name: Update overall changelog
+        run: |
+          echo "${{ steps.version_changelog.outputs.all_changes }}" >> CHANGELOG.md
+          git add CHANGELOG.md
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -am "Update CHANGELOG.md [skip ci]"
+      - name: Push changes
+        uses: ad-m/github-push-action@master
         with:
-          source_branch: "temporary-${{ matrix.directory }}-${{ github.run_id }}"
-          destination_branch: "master"
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          pr_title: "Update version for ${{ matrix.directory }}"
-          pr_body: "Automated version update"
-          pr_label: "automerge"
+          branch: ${{ github.ref }}
 
       - name: Create tag
-        run: |
-          git tag -d v$(cat ${{ matrix.directory }}/package.json | jq -r '.version') || true
-          git tag v$(cat ${{ matrix.directory }}/package.json | jq -r '.version')
+        run: git tag v${{ steps.overall_version.outputs.overall_version }}
 
       - name: Push tag
-        run: |
-          git push origin --tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tags: true
 
       - name: Create Release
         id: create_release
@@ -100,75 +83,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Release v${{ steps.version.outputs.version }}
-          body: ${{ steps.changelog.outputs.data }}
-          draft: false
-          prerelease: false
-
-  top_level:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: 14
-
-      - name: Update top level version and create new branch
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git checkout -b temporary-top-level-${{ github.run_id }}
-          npm version patch --no-git-tag-version
-          git add package.json package-lock.json
-          git commit -m "chore(release): $(cat package.json | jq -r '.version') [skip ci]"
-
-      - name: Push changes
-        run: |
-          git push origin HEAD:temporary-top-level-${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create pull request
-        uses: repo-sync/pull-request@v2
-        with:
-          source_branch: "temporary-top-level-${{ github.run_id }}"
-          destination_branch: "master"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          pr_title: "Update top level version"
-          pr_body: "Automated version update"
-          pr_label: "automerge"
-
-      - name: Create tag
-        run: |
-          git tag -d v$(cat package.json | jq -r '.version') || true
-          git tag v$(cat package.json | jq -r '.version')
-
-      - name: Push tag
-        run: |
-          git push origin --tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate aggregated changelog
-        id: agg_changelog
-        run: |
-          chmod +x ./generate-aggregated-changelog.sh
-          ./generate-aggregated-changelog.sh > aggregated-changelog.md
-          echo "::set-output name=aggregated_changelog::$(cat aggregated-changelog.md)"
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v$(cat package.json | jq -r '.version')
-          release_name: Release v$(cat package.json | jq -r '.version')
-          body: ${{ steps.agg_changelog.outputs.aggregated_changelog }}
+          tag_name: v${{ steps.overall_version.outputs.overall_version }}
+          release_name: Release v${{ steps.overall_version.outputs.overall_version }}
+          body: ${{ steps.version_changelog.outputs.all_changes }}
           draft: false
           prerelease: false
