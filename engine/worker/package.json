@@ -1,6 +1,6 @@
 {
   "name": "agnost-engine-worker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "This is the worker engine for the Agnost application.",
   "main": "index.js",
   "scripts": {
