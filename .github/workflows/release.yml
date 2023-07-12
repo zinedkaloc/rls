@@ -19,6 +19,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Install lerna
+        run: npm i -g lerna
+
       - name: Check for changes and update versions
         run: |
           packages=("engine/core" "engine/monitor" "engine/realtime" "engine/scheduler" "engine/worker" "platform/core" "platform/sync" "platform/worker" "studio")
@@ -34,6 +37,7 @@ jobs:
               npm version patch --no-git-tag-version
               version=$(cat package.json | jq -r '.version')
               git add package.json
+
               changelog=$(npx conventional-changelog -p angular -i CHANGELOG.md -s)
               all_changes+="# $package $version\n"
               all_changes+="$changelog\n\n"
